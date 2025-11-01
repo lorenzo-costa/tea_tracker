@@ -79,7 +79,7 @@
         );
 
         // Login Component
-        function Login({ onLogin }) {
+        function Login() {
           const [email, setEmail] = useState('');
           const [password, setPassword] = useState('');
           const [isSignUp, setIsSignUp] = useState(false);
@@ -93,11 +93,35 @@
 
             try {
               if (isSignUp) {
-                await auth.createUserWithEmailAndPassword(email, password);
+                // ✅ Create user
+                const cred = await auth.createUserWithEmailAndPassword(email, password);
+                const user = cred.user;
+
+                // ✅ Fetch default teas
+                const response = await fetch('default_teas.json');
+                if (!response.ok) throw new Error('Failed to load default teas file');
+                const defaultTeas = await response.json();
+
+                // ✅ Upload to Firestore
+                const batch = db.batch();
+                defaultTeas.forEach((tea) => {
+                  const docRef = db.collection('users').doc(user.uid).collection('teas').doc();
+                  batch.set(docRef, {
+                    name: tea.name,
+                    image: tea.image,
+                    tried: tea.tried ?? false,
+                    notes: tea.notes ?? '',
+                    dateAdded: firebase.firestore.FieldValue.serverTimestamp(),
+                  });
+                });
+                await batch.commit();
+                console.log(`Default teas added for new user: ${defaultTeas.length} teas`);
               } else {
+                // ✅ Normal login
                 await auth.signInWithEmailAndPassword(email, password);
               }
             } catch (err) {
+              console.error(err);
               setError(err.message);
             } finally {
               setLoading(false);
@@ -114,9 +138,7 @@
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                     <input
                       type="email"
                       value={email}
@@ -127,9 +149,7 @@
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Password
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
                     <input
                       type="password"
                       value={password}
@@ -140,9 +160,7 @@
                   </div>
 
                   {error && (
-                    <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">
-                      {error}
-                    </div>
+                    <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">{error}</div>
                   )}
 
                   <button
@@ -162,7 +180,9 @@
                     }}
                     className="text-green-600 hover:text-green-700 text-sm"
                   >
-                    {isSignUp ? 'Already have an account? Log in' : "Don't have an account? Sign up"}
+                    {isSignUp
+                      ? 'Already have an account? Log in'
+                      : "Don't have an account? Sign up"}
                   </button>
                 </div>
               </div>
